@@ -74,3 +74,6 @@ This project simulates a **secure door access system** built using Arduino Uno a
 
 ## ✅ Default Password
 
+- Current: 1234
+- Change inside main.cpp char password[] = "";
+
