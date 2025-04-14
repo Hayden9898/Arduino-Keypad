@@ -2,9 +2,15 @@
 #include <Keypad.h>
 #include <LiquidCrystal.h>
 
+// --- CONSTANTS ---
 const byte ROWS = 4;
 const byte COLS = 4;
+const char password[] = "1234";
+const byte resetButtonPin = 13;
+const byte greenLed = 10;
+const byte redLed = 11;
 
+// --- KEYPAD SETUP ---
 char keys[ROWS][COLS] = {
   {'1','2','3','A'},
   {'4','5','6','B'},
@@ -12,111 +18,138 @@ char keys[ROWS][COLS] = {
   {'*','0','#','D'}
 };
 
-//Connect button right legs to columns, left legs to rows
-byte rowPins[ROWS] = {2, 3, 4, 5}; 
-byte colPins[COLS] = {6, 7, 8, 9}; 
-
-//Create 4x4 Keypad object 
+byte rowPins[ROWS] = {2, 3, 4, 5};
+byte colPins[COLS] = {6, 7, 8, 9};
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
+// --- LCD SETUP ---
 LiquidCrystal lcd(A0, A1, A2, A3, A4, A5);
 
-char password[] = "1234";
+// --- VARIABLES ---
 char input[5];
 byte inputIndex = 0;
 byte attempts = 0;
 
+//
+// --- FUNCTION DECLARATIONS ---
+//
+void grantAccess();
+void denyAccess();
+void resetSystem();
+void handleLockout();
+void handleInput(char key);
+
 
 void setup() {
-  pinMode(10, OUTPUT); //Green LED
-  pinMode(11, OUTPUT); //Red LED
-  pinMode(13, INPUT_PULLUP); //Reset Button
+  pinMode(greenLed, OUTPUT);
+  pinMode(redLed, OUTPUT);
+  pinMode(resetButtonPin, INPUT_PULLUP);
 
-  Serial.begin(9600); 
+  Serial.begin(9600);
   lcd.begin(16, 2);
   lcd.print("Enter Password:");
-  lcd.setCursor(0,1);
+  lcd.setCursor(0, 1);
 }
 
 void loop() {
-  char key = keypad.getKey();
-
-  if(attempts >= 3){
-    lcd.clear();
-    lcd.print("No more attempts");
-    lcd.setCursor(0,1);
-    lcd.print("Press reset!");
-
-    for(int i=0; i<3; i++){
-      digitalWrite(11, HIGH);
-      delay(300);
-      digitalWrite(11, LOW);
-      delay(300);
-    }
-
-    digitalWrite(11, HIGH);
-
-    //Lock system till reset
-    while(true){
-      if(digitalRead(13) == LOW){
-        attempts = 0;
-        lcd.clear();
-        lcd.print("Resetting!");
-        digitalWrite(10, LOW);
-        digitalWrite(11, LOW);
-        delay(2000);
-        lcd.clear();
-        lcd.print("Enter Password:");
-        break;
-      }
-    }
+  if (attempts >= 3) {
+    handleLockout();
+    return;
   }
 
+  char key = keypad.getKey();
   if (key) {
-    //Logic for checking password entered
-    if(inputIndex < 4){
-      input[inputIndex] = key;
-      inputIndex++;
+    handleInput(key);
+  }
+}
 
-      lcd.setCursor(inputIndex - 1, 1);
-      lcd.print("*");
+//
+// --- FUNCTION DEFINITIONS ---
+//
+
+void handleInput(char key) {
+  if (inputIndex < 4) {
+    input[inputIndex++] = key;
+    lcd.setCursor(inputIndex - 1, 1);
+    lcd.print("*");
+  }
+
+  if (inputIndex == 4) {
+    input[4] = '\0';
+
+    delay(500);
+    lcd.setCursor(0, 1);
+    lcd.print("Checking...     ");
+    delay(1000);
+
+    if (strcmp(input, password) == 0) {
+      grantAccess();
+    } else {
+      denyAccess();
     }
-    if(inputIndex == 4){
-      input[4] = '\0';
 
-      delay(500);
-      lcd.setCursor(0,1);
-      lcd.print("Checking...     ");
-      delay(1000);
+    delay(2000);
+    lcd.clear();
+    lcd.print("Enter Password:");
+    lcd.setCursor(0, 1);
+    lcd.print("Attempts: ");
+    lcd.print(attempts);
+    delay(1500);
 
-      if(strcmp(input, password) == 0){
-        lcd.clear();
-        lcd.print("Access Granted");
-        digitalWrite(10, HIGH);
-        digitalWrite(11, LOW);
-      } else {
-        attempts++;
-        lcd.clear();
-        lcd.print("Access Denied");
-        digitalWrite(10, LOW);
-        digitalWrite(11, HIGH);
-      }
-      delay(2000);
-      lcd.clear();
-      lcd.print("Enter Password:");
-      lcd.setCursor(0,1);
-      lcd.print("Attempts: ");
-      lcd.print(attempts);
-      delay(1500);
+    memset(input, 0, sizeof(input));
+    inputIndex = 0;
+    digitalWrite(greenLed, LOW);
+    digitalWrite(redLed, LOW);
+    lcd.clear();
+    lcd.print("Enter Password:");
+  }
+}
 
-      //reset
-      memset(input, 0, sizeof(input));
-      inputIndex = 0;
-      
-      digitalWrite(10, LOW);
-      digitalWrite(11, LOW);
-      lcd.clear();
-      lcd.print("Enter Password:");
+void grantAccess() {
+  lcd.clear();
+  lcd.print("Access Granted");
+  digitalWrite(greenLed, HIGH);
+  digitalWrite(redLed, LOW);
+}
+
+void denyAccess() {
+  attempts++;
+  lcd.clear();
+  lcd.print("Access Denied");
+  digitalWrite(greenLed, LOW);
+  digitalWrite(redLed, HIGH);
+}
+
+void resetSystem() {
+  attempts = 0;
+  lcd.clear();
+  lcd.print("Resetting...");
+  digitalWrite(greenLed, LOW);
+  digitalWrite(redLed, LOW);
+  delay(2000);
+  lcd.clear();
+  lcd.print("Enter Password:");
+  lcd.setCursor(0, 1);
+}
+
+void handleLockout() {
+  lcd.clear();
+  lcd.print("No more attempts");
+  lcd.setCursor(0, 1);
+  lcd.print("Press reset!");
+
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(redLed, HIGH);
+    delay(300);
+    digitalWrite(redLed, LOW);
+    delay(300);
+  }
+  digitalWrite(redLed, HIGH);
+
+  while (true) {
+    if (digitalRead(resetButtonPin) == LOW) {
+      resetSystem();
+      break;
     }
   }
 }
